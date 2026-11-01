@@ -3,620 +3,199 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>부모님 스마트 혈당 & 인슐린 계산기</title>
-    <!-- Tailwind CSS 로드 -->
+    <title>부모님 혈당 & 인슐린 기록장</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 구글 폰트 Inter 및 Noto Sans KR -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Noto Sans KR', sans-serif;
-        }
-        /* 터치 친화적 큰 버튼 및 입력창 스타일 */
-        .big-input {
-            font-size: 1.25rem;
-            padding: 0.75rem 1rem;
-        }
-    </style>
+    <!-- Firebase App & Realtime Database CDN (Compat 버전) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between">
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
+    <div class="max-w-md mx-auto p-4 sm:p-6">
+        <!-- 타이틀 -->
+        <header class="text-center mb-6 pt-4">
+            <h1 class="text-2xl font-bold text-blue-600">🩺 부모님 혈당 & 인슐린 관리</h1>
+            <p class="text-xs text-slate-500 mt-1">퇴원교육지 기준 자동 계산 및 실시간 공유</p>
+        </header>
 
-    <!-- 상단 헤더 -->
-    <header class="bg-blue-600 text-white shadow-md sticky top-0 z-50">
-        <div class="max-w-4xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center">
-            <div class="flex items-center space-x-3 mb-2 sm:mb-0">
-                <span class="text-3xl">💉</span>
+        <!-- 입력 카드 -->
+        <div class="bg-white rounded-2xl shadow-md p-5 mb-6 border border-slate-100">
+            <h2 class="text-lg font-semibold mb-4 text-slate-700 flex items-center">
+                <span class="bg-blue-100 text-blue-600 text-sm px-2 py-0.5 rounded mr-2">입력</span> 당뇨수치 기록하기
+            </h2>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-slate-600 mb-1">📅 날짜 선택</label>
+                <input type="date" id="recordDate" class="w-full p-3 border border-slate-300 rounded-xl text-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mb-4">
                 <div>
-                    <h1 class="text-2xl font-extrabold tracking-tight">부모님 인슐린 계산 & 혈당 관리</h1>
-                    <p class="text-xs text-blue-100">퇴원교육지 기준 자동 계산 프로그램</p>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">아침 식전 혈당</label>
+                    <input type="number" id="amBefore" placeholder="예: 150" class="w-full p-3 border border-slate-300 rounded-xl text-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">점심 식전 혈당</label>
+                    <input type="number" id="lunchBefore" placeholder="예: 270" class="w-full p-3 border border-slate-300 rounded-xl text-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">저녁 식전 혈당</label>
+                    <input type="number" id="pmBefore" placeholder="예: 135" class="w-full p-3 border border-slate-300 rounded-xl text-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">전날 투제오 기준 (아침)</label>
+                    <input type="number" id="baseToujeo" value="12" class="w-full p-3 border border-slate-300 rounded-xl text-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:outline-none">
                 </div>
             </div>
-            <!-- 탭 네비게이션 버튼 -->
-            <div class="flex space-x-2 bg-blue-700 p-1 rounded-xl">
-                <button onclick="switchTab('calc')" id="btn-calc" class="px-4 py-2 rounded-lg font-bold text-sm bg-white text-blue-700 shadow transition">오늘 기록 및 계산</button>
-                <button onclick="switchTab('history')" id="btn-history" class="px-4 py-2 rounded-lg font-bold text-sm text-white hover:bg-blue-600 transition">혈당 관리표</button>
-                <button onclick="switchTab('guide')" id="btn-guide" class="px-4 py-2 rounded-lg font-bold text-sm text-white hover:bg-blue-600 transition">저혈당 & 주의사항</button>
+
+            <button onclick="calculateAndSave()" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg hover:bg-blue-700 active:scale-95 transition text-lg">
+                인슐린 용량 계산 및 저장하기
+            </button>
+        </div>
+
+        <!-- 결과 확인 카드 -->
+        <div id="resultCard" class="bg-blue-50 rounded-2xl border border-blue-200 p-5 mb-6 hidden">
+            <h2 class="text-lg font-bold text-blue-900 mb-3">💡 추천 투여 용량 결과</h2>
+            <div class="space-y-2 text-blue-950 text-base">
+                <p id="resToujeo" class="bg-white p-3 rounded-xl shadow-sm border border-blue-100"></p>
+                <p id="resHumalog" class="bg-white p-3 rounded-xl shadow-sm border border-blue-100"></p>
             </div>
         </div>
-    </header>
 
-    <!-- 메인 컨텐츠 영역 -->
-    <main class="max-w-4xl w-full mx-auto px-4 py-6 flex-grow">
-
-        <!-- 1. 오늘 기록 및 계산 탭 -->
-        <section id="tab-calc" class="space-y-6">
-            <!-- 날짜 선택 카드 -->
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div class="flex items-center space-x-3 w-full sm:w-auto">
-                    <span class="text-2xl">📅</span>
-                    <div>
-                        <label for="record-date" class="block text-sm font-semibold text-slate-500">기록 날짜 선택</label>
-                        <input type="date" id="record-date" class="mt-1 font-bold text-xl bg-slate-100 border border-slate-300 rounded-xl px-4 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto">
-                    </div>
-                </div>
-                <button onclick="loadTodayData()" class="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-5 py-3 rounded-xl transition border border-slate-300">오늘 날짜로 맞추기</button>
+        <!-- 최근 기록 리스트 (실시간 연동) -->
+        <div class="bg-white rounded-2xl shadow-md p-5 border border-slate-100">
+            <h2 class="text-lg font-semibold mb-3 text-slate-700">📋 실시간 혈당 관리표</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200 text-slate-500 bg-slate-50">
+                            <th class="p-2.5">날짜</th>
+                            <th class="p-2.5">아침(식전)</th>
+                            <th class="p-2.5">점심(식전)</th>
+                            <th class="p-2.5">저녁(식전)</th>
+                            <th class="p-2.5">추천 인슐린</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordTableBody">
+                        <tr><td colspan="5" class="text-center p-4 text-slate-400">데이터를 불러오는 중...</td></tr>
+                    </tbody>
+                </table>
             </div>
-
-            <!-- 혈당 입력 및 인슐린 계산 그리드 -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-                <!-- 아침 (투제오 + 휴마로그) -->
-                <div class="bg-white p-6 rounded-2xl shadow-md border-2 border-blue-100 flex flex-col justify-between">
-                    <div>
-                        <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-xl font-extrabold text-blue-700 flex items-center">
-                                <span class="bg-blue-100 text-blue-800 p-2 rounded-xl mr-2 text-lg">☀️</span> 아침 식전
-                            </h2>
-                            <span class="text-xs bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full">투제오 + 휴마로그</span>
-                        </div>
-
-                        <!-- 아침 공복혈당 입력 -->
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold text-slate-700 mb-1">아침 공복혈당 (mg/dL)</label>
-                            <input type="number" id="morning-bs" placeholder="예: 150" class="w-full big-input border-2 border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none bg-slate-50 font-bold text-center" oninput="calculateAll()">
-                        </div>
-
-                        <!-- 계산 결과 영역 -->
-                        <div class="bg-blue-50 p-4 rounded-xl space-y-3 mb-4 border border-blue-200">
-                            <div>
-                                <span class="text-xs font-bold text-blue-600 block">⚪ 투제오 (기저인슐린, 흰색 주사)</span>
-                                <div class="text-2xl font-black text-blue-900 mt-0.5" id="res-toujeo">- 단위</div>
-                                <p class="text-xs text-slate-500 mt-0.5" id="desc-toujeo">혈당을 입력해주세요</p>
-                            </div>
-                            <hr class="border-blue-200">
-                            <div>
-                                <span class="text-xs font-bold text-blue-600 block">⚫ 휴마로그 (식사인슐린, 검은색 주사)</span>
-                                <div class="text-2xl font-black text-blue-900 mt-0.5" id="res-morning-humalog">- 단위</div>
-                                <p class="text-xs text-slate-500 mt-0.5" id="desc-morning-humalog">기본 기준: 4단위</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 실제 투여한 용량 입력 (확인용) -->
-                    <div class="border-t pt-4 space-y-2">
-                        <p class="text-xs font-bold text-slate-500">실제 주사한 용량 기록</p>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label class="text-xs text-slate-600 block">투제오 실제</label>
-                                <input type="number" id="actual-toujeo" placeholder="단위" class="w-full text-center border rounded-lg py-1.5 font-bold bg-slate-50">
-                            </div>
-                            <div>
-                                <label class="text-xs text-slate-600 block">아침 휴마실제</label>
-                                <input type="number" id="actual-morning-humalog" placeholder="단위" class="w-full text-center border rounded-lg py-1.5 font-bold bg-slate-50">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 점심 (휴마로그) -->
-                <div class="bg-white p-6 rounded-2xl shadow-md border-2 border-emerald-100 flex flex-col justify-between">
-                    <div>
-                        <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-xl font-extrabold text-emerald-700 flex items-center">
-                                <span class="bg-emerald-100 text-emerald-800 p-2 rounded-xl mr-2 text-lg">밥</span> 점심 식전
-                            </h2>
-                            <span class="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">휴마로그 단독</span>
-                        </div>
-
-                        <!-- 점심 식전혈당 입력 -->
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold text-slate-700 mb-1">점심 식전혈당 (mg/dL)</label>
-                            <input type="number" id="lunch-bs" placeholder="예: 270" class="w-full big-input border-2 border-slate-300 rounded-xl focus:border-emerald-500 focus:outline-none bg-slate-50 font-bold text-center" oninput="calculateAll()">
-                        </div>
-
-                        <!-- 계산 결과 영역 -->
-                        <div class="bg-emerald-50 p-4 rounded-xl space-y-3 mb-4 border border-emerald-200">
-                            <div>
-                                <span class="text-xs font-bold text-emerald-600 block">⚫ 휴마로그 (식사인슐린, 검은색 주사)</span>
-                                <div class="text-2xl font-black text-emerald-900 mt-0.5" id="res-lunch-humalog">- 단위</div>
-                                <p class="text-xs text-slate-500 mt-0.5" id="desc-lunch-humalog">기본 기준: 4단위</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 실제 투여한 용량 입력 -->
-                    <div class="border-t pt-4 space-y-2">
-                        <p class="text-xs font-bold text-slate-500">실제 주사한 용량 기록</p>
-                        <div>
-                            <label class="text-xs text-slate-600 block">점심 휴마실제</label>
-                            <input type="number" id="actual-lunch-humalog" placeholder="단위 입력" class="w-full text-center border rounded-lg py-1.5 font-bold bg-slate-50">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 저녁 (휴마로그) -->
-                <div class="bg-white p-6 rounded-2xl shadow-md border-2 border-orange-100 flex flex-col justify-between">
-                    <div>
-                        <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-xl font-extrabold text-orange-700 flex items-center">
-                                <span class="bg-orange-100 text-orange-800 p-2 rounded-xl mr-2 text-lg">🌙</span> 저녁 식전
-                            </h2>
-                            <span class="text-xs bg-orange-100 text-orange-800 font-bold px-2.5 py-1 rounded-full">휴마로그 단독</span>
-                        </div>
-
-                        <!-- 저녁 식전혈당 입력 -->
-                        <div class="mb-4">
-                            <label class="block text-sm font-bold text-slate-700 mb-1">저녁 식전혈당 (mg/dL)</label>
-                            <input type="number" id="dinner-bs" placeholder="예: 135" class="w-full big-input border-2 border-slate-300 rounded-xl focus:border-orange-500 focus:outline-none bg-slate-50 font-bold text-center" oninput="calculateAll()">
-                        </div>
-
-                        <!-- 계산 결과 영역 -->
-                        <div class="bg-orange-50 p-4 rounded-xl space-y-3 mb-4 border border-orange-200">
-                            <div>
-                                <span class="text-xs font-bold text-orange-600 block">⚫ 휴마로그 (식사인슐린, 검은색 주사)</span>
-                                <div class="text-2xl font-black text-orange-900 mt-0.5" id="res-dinner-humalog">- 단위</div>
-                                <p class="text-xs text-slate-500 mt-0.5" id="desc-dinner-humalog">기본 기준: 8단위</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 실제 투여한 용량 입력 -->
-                    <div class="border-t pt-4 space-y-2">
-                        <p class="text-xs font-bold text-slate-500">실제 주사한 용량 기록</p>
-                        <div>
-                            <label class="text-xs text-slate-600 block">저녁 휴마실제</label>
-                            <input type="number" id="actual-dinner-humalog" placeholder="단위 입력" class="w-full text-center border rounded-lg py-1.5 font-bold bg-slate-50">
-                        </div>
-                    </div>
-
-                </div>
-
-            </div>
-
-            <!-- 메모 및 저장 버튼 -->
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-                <div>
-                    <label class="block text-sm font-bold text-slate-700 mb-1">메모 (특이사항 / 저혈당 증상 여부 등)</label>
-                    <input type="text" id="daily-memo" placeholder="예: 운동 30분 함, 저녁에 간식 조금 드심" class="w-full border border-slate-300 rounded-xl p-3 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div class="flex flex-col sm:flex-row justify-end gap-3">
-                    <button onclick="clearForm()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-6 py-3.5 rounded-xl transition">입력 초기화</button>
-                    <button onclick="saveRecord()" class="bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-8 py-3.5 rounded-xl shadow-lg transition flex items-center justify-center space-x-2">
-                        <span>💾</span>
-                        <span>이 날짜 혈당 & 인슐린 기록 저장하기</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 안내 배너 -->
-            <div class="bg-blue-50 border border-blue-200 rounded-2xl p-5 flex items-start space-x-4">
-                <span class="text-3xl">💡</span>
-                <div class="text-sm text-blue-900 space-y-1">
-                    <p class="font-extrabold text-base">투약 조절 기준 안내 (퇴원교육지)</p>
-                    <p>• <b>투제오 (아침 공복혈당 기준):</b> 100미만 (-2단위) / 100~150 (유지) / 150초과 (+2단위) <span class="text-xs text-slate-500">(기본 시작: 12단위)</span></p>
-                    <p>• <b>휴마로그 (각 식전혈당 기준):</b> 150미만 (-2단위) / 150~200 (유지) / 200이상 (+2단위) <span class="text-xs text-slate-500">(기본 시작: 아침 4, 점심 4, 저녁 8단위)</span></p>
-                </div>
-            </div>
-        </section>
-
-        <!-- 2. 혈당 관리표 탭 -->
-        <section id="tab-history" class="hidden space-y-6">
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                    <div>
-                        <h2 class="text-2xl font-extrabold text-slate-800">📋 혈당 관리 기록표</h2>
-                        <p class="text-sm text-slate-500">저장된 모든 날짜별 혈당 측정치와 인슐린 투여 내역입니다.</p>
-                    </div>
-                    <div class="flex gap-2">
-                        <button onclick="exportData()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-sm transition">데이터 백업(다운로드)</button>
-                        <label class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2 rounded-xl text-sm cursor-pointer transition">
-                            복원하기 <input type="file" id="import-file" class="hidden" onchange="importData(event)">
-                        </label>
-                    </div>
-                </div>
-
-                <!-- 테이블 뷰 (반응형 스크롤) -->
-                <div class="overflow-x-auto border border-slate-200 rounded-xl">
-                    <table class="w-full text-left border-collapse min-w-[700px]">
-                        <thead>
-                            <tr class="bg-blue-600 text-white text-sm">
-                                <th class="p-3 font-bold border-r border-blue-500 text-center">날짜</th>
-                                <th class="p-3 font-bold border-r border-blue-500 text-center">아침공복<br><span class="text-xs font-normal">투제오/휴마</span></th>
-                                <th class="p-3 font-bold border-r border-blue-500 text-center">점심식전<br><span class="text-xs font-normal">휴마로그</span></th>
-                                <th class="p-3 font-bold border-r border-blue-500 text-center">저녁식전<br><span class="text-xs font-normal">휴마로그</span></th>
-                                <th class="p-3 font-bold border-r border-blue-500 text-center">메모</th>
-                                <th class="p-3 font-bold text-center">관리</th>
-                            </tr>
-                        </thead>
-                        <tbody id="history-table-body" class="divide-y divide-slate-200 text-sm">
-                            <!-- JS로 동적 생성됨 -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-        <!-- 3. 저혈당 예방 및 주의사항 탭 -->
-        <section id="tab-guide" class="hidden space-y-6">
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
-                <div class="border-b pb-4">
-                    <h2 class="text-2xl font-extrabold text-red-600 flex items-center">
-                        <span class="mr-2">🚨</span> 저혈당의 예방 및 대처요령
-                    </h2>
-                    <p class="text-sm text-slate-500 mt-1">퇴원교육지 안내사항을 요약한 내용입니다. 늘 숙지해 주세요.</p>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-red-50 p-5 rounded-2xl border border-red-200 space-y-3">
-                        <h3 class="font-extrabold text-red-800 text-lg flex items-center">
-                            <span class="mr-2">⚠️</span> 저혈당 증상이 나타나면?
-                        </h3>
-                        <ul class="list-disc list-inside text-sm text-red-900 space-y-2 leading-relaxed">
-                            <li>식사, 운동을 규칙적으로 균형 있게 합니다.</li>
-                            <li>약물투여를 처방대로 정확히 합니다.</li>
-                            <li>저혈당 증상(식은땀, 현기증, 떨림)이 나타나면 즉시 병원에 연락하여 약물을 조정합니다.</li>
-                            <li>가족, 친구, 친척, 동료에게 저혈당 증상을 알려주어 발생 시 도움을 받을 수 있도록 합니다.</li>
-                            <li>당뇨병 인식표 및 <b>저혈당 응급식품(사탕, 주스 등)</b>을 상시 지참하고 다닙니다.</li>
-                        </ul>
-                    </div>
-
-                    <div class="bg-amber-50 p-5 rounded-2xl border border-amber-200 space-y-3">
-                        <h3 class="font-extrabold text-amber-800 text-lg flex items-center">
-                            <span class="mr-2">🔍</span> 반드시 자가혈당 검사를 해야 하는 경우
-                        </h3>
-                        <ul class="list-disc list-inside text-sm text-amber-900 space-y-2 leading-relaxed">
-                            <li><b>장거리 운전 전</b></li>
-                            <li><b>운동 전, 후</b></li>
-                            <li><b>음주 전</b></li>
-                            <li><b>인슐린 또는 경구약의 용량을 늘렸을 경우</b></li>
-                            <li><b>저혈당 증상이 나타날 때</b></li>
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="bg-slate-100 p-5 rounded-2xl border border-slate-300 space-y-2">
-                    <h3 class="font-extrabold text-slate-800 text-base">💊 투여 주사 색상 구분 (참고사항)</h3>
-                    <p class="text-sm text-slate-700">• <b>흰색 주사:</b> 투제오 (기저인슐린, 아침 공복혈당 기준 조절)</p>
-                    <p class="text-sm text-slate-700">• <b>검은색 주사:</b> 휴마로그 (식사인슐린, 아침/점심/저녁 식전혈당 기준 조절)</p>
-                </div>
-            </div>
-        </section>
-
-    </main>
-
-    <!-- 푸터 -->
-    <footer class="bg-white border-t border-slate-200 mt-12 py-6 text-center text-xs text-slate-500">
-        <p>부모님 건강을 위한 스마트 당뇨 관리 프로그램 • 퇴원교육지 기준 적용</p>
-    </footer>
-
-    <!-- 알림 모달 (alert 대신 사용) -->
-    <div id="custom-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-2xl max-w-sm w-full p-6 text-center space-y-4 shadow-xl">
-            <div id="modal-icon" class="text-4xl">✅</div>
-            <h3 id="modal-title" class="font-extrabold text-lg text-slate-800">알림</h3>
-            <p id="modal-message" class="text-sm text-slate-600">메시지 내용입니다.</p>
-            <button onclick="closeModal()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition">확인</button>
         </div>
     </div>
 
-    <!-- 자바스크립트 로직 -->
     <script>
-        // 초기 기본값 설정
-        const BASE_TOUJEO = 12;
-        const BASE_HUMALOG_MORNING = 4;
-        const BASE_HUMALOG_LUNCH = 4;
-        const BASE_HUMALOG_DINNER = 8;
-
-        // 페이지 로드 시 오늘 날짜 세팅 및 데이터 불러오기
-        window.onload = function() {
-            const todayStr = getFormattedDate(new Date());
-            document.getElementById('record-date').value = todayStr;
-            
-            // 날짜 변경 시 해당 기록 불러오기 리스너
-            document.getElementById('record-date').addEventListener('change', function() {
-                loadRecordForDate(this.value);
-            });
-
-            loadTodayData();
+        // TODO: 본인의 Firebase 설정값으로 아래를 교체하세요!
+        const firebaseConfig = {
+          apiKey: "AIzaSyCyVibhpODmcPxfoRHKJC9ZhY0ODGsNIJo",
+          authDomain: "insulin-trackerfordaddy.firebaseapp.com",
+          databaseURL: "https://insulin-trackerfordaddy-default-rtdb.firebaseio.com",
+          projectId: "insulin-trackerfordaddy",
+          storageBucket: "insulin-trackerfordaddy.firebasestorage.app",
+          messagingSenderId: "377348468107",
+          appId: "1:377348468107:web:d159535a4e2b6eb0c7538e",
+          measurementId: "G-TDZY49Z7R4"
         };
 
-        // 날짜 포맷 함수 (YYYY-MM-DD)
-        function getFormattedDate(date) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        }
+        // Firebase 초기화
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-        // 탭 전환 함수
-        function switchTab(tabId) {
-            ['calc', 'history', 'guide'].forEach(id => {
-                document.getElementById(`tab-${id}`).classList.add('hidden');
-                document.getElementById(`btn-${id}`).classList.remove('bg-white', 'text-blue-700', 'shadow');
-                document.getElementById(`btn-${id}`).classList.add('text-white');
-            });
-            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
-            document.getElementById(`btn-${tabId}`).classList.add('bg-white', 'text-blue-700', 'shadow');
-            document.getElementById(`btn-${tabId}`).classList.remove('text-white');
+        // 오늘 날짜 기본 세팅
+        document.getElementById('recordDate').valueAsDate = new Date();
 
-            if (tabId === 'history') {
-                renderHistoryTable();
+        // 데이터 실시간 동기화 리스너 (부모님이 입력하든 자녀가 보든 실시간 반영)
+        db.ref('insulin_records').on('value', (snapshot) => {
+            const tbody = document.getElementById('recordTableBody');
+            tbody.innerHTML = '';
+            
+            const data = snapshot.val();
+            if (!data) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-slate-400">저장된 기록이 없습니다.</td></tr>`;
+                return;
             }
-        }
 
-        // 인슐린 계산 핵심 로직 (퇴원교육지 기준 반영)
-        function calculateAll() {
-            const morningBs = parseFloat(document.getElementById('morning-bs').value);
-            const lunchBs = parseFloat(document.getElementById('lunch-bs').value);
-            const dinnerBs = parseFloat(document.getElementById('dinner-bs').value);
+            // 날짜 최신순 정렬
+            const keys = Object.keys(data).sort().reverse();
+            keys.forEach(key => {
+                const item = data[key];
+                const row = document.createElement('tr');
+                row.className = "border-b border-slate-100 hover:bg-slate-50";
+                row.innerHTML = `
+                    <td class="p-2.5 font-medium text-slate-700">${item.date}</td>
+                    <td class="p-2.5">${item.amBefore || '-'}</td>
+                    <td class="p-2.5">${item.lunchBefore || '-'}</td>
+                    <td class="p-2.5">${item.pmBefore || '-'}</td>
+                    <td class="p-2.5 text-xs text-slate-600">${item.summary || '-'}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        });
+
+        function calculateAndSave() {
+            const date = document.getElementById('recordDate').value;
+            const amBefore = parseFloat(document.getElementById('amBefore').value) || 0;
+            const lunchBefore = parseFloat(document.getElementById('lunchBefore').value) || 0;
+            const pmBefore = parseFloat(document.getElementById('pmBefore').value) || 0;
+            const baseToujeo = parseFloat(document.getElementById('baseToujeo').value) || 12;
+
+            if (!date) {
+                alert('날짜를 선택해주세요.');
+                return;
+            }
 
             // 1. 투제오 계산 (아침 공복혈당 기준)
-            let toujeoVal = BASE_TOUJEO;
-            let toujeoDesc = "기준 용량 유지 (12단위)";
-
-            if (!isNaN(morningBs)) {
-                if (morningBs < 100) {
-                    toujeoVal = Math.max(0, BASE_TOUJEO - 2);
-                    toujeoDesc = "공복혈당 100 미만 → 2단위 감량";
-                } else if (morningBs <= 150) {
-                    toujeoVal = BASE_TOUJEO;
-                    toujeoDesc = "공복혈당 100~150 → 유지";
+            let toujeoResult = "";
+            let newToujeo = baseToujeo;
+            if (amBefore > 0) {
+                if (amBefore < 100) {
+                    newToujeo = baseToujeo - 2;
+                    toujeoResult = `⚪ 투제오 (백색): 공복혈당 ${amBefore} (100 미만) ➔ **${newToujeo}단지 감량** (${baseToujeo} → ${newToujeo})`;
+                } else if (amBefore <= 150) {
+                    toujeoResult = `⚪ 투제오 (백색): 공복혈당 ${amBefore} (100~150) ➔ **유지 (${baseToujeo}단위)**`;
                 } else {
-                    toujeoVal = BASE_TOUJEO + 2;
-                    toujeoDesc = "공복혈당 150 초과 → 2단위 증량";
+                    newToujeo = baseToujeo + 2;
+                    toujeoResult = `⚪ 투제오 (백색): 공복혈당 ${amBefore} (150 초과) ➔ **${newToujeo}단위 증량** (${baseToujeo} → ${newToujeo})`;
                 }
+            } else {
+                toujeoResult = `⚪ 투제오: 아침 공복혈당 미입력`;
             }
 
-            document.getElementById('res-toujeo').innerText = isNaN(morningBs) ? "- 단위" : `${toujeoVal} 단위`;
-            document.getElementById('desc-toujeo').innerText = isNaN(morningBs) ? "공복혈당을 입력해주세요" : toujeoDesc;
+            // 2. 휴마로그 계산 (아침, 점심, 저녁 식전)
+            function getHumalogAction(val, mealName) {
+                if (val <= 0) return `${mealName}: 미입력`;
+                if (val < 150) return `${mealName} 식전 ${val} (150 미만) ➔ **2단위 감량**`;
+                if (val <= 200) return `${mealName} 식전 ${val} (150~200) ➔ **유지**`;
+                return `${mealName} 식전 ${val} (200 이상) ➔ **2단위 증량**`;
+            }
 
-            // 2. 아침 휴마로그 계산
-            let mHumalogVal = BASE_HUMALOG_MORNING;
-            let mHumalogDesc = "기준 용량 유지 (4단위)";
-            if (!isNaN(morningBs)) {
-                if (morningBs < 150) {
-                    mHumalogVal = Math.max(0, BASE_HUMALOG_MORNING - 2);
-                    mHumalogDesc = "식전혈당 150 미만 → 2단위 감량";
-                } else if (morningBs <= 200) {
-                    mHumalogVal = BASE_HUMALOG_MORNING;
-                    mHumalogDesc = "식전혈당 150~200 → 유지";
+            const humalogAm = getHumalogAction(amBefore, '아침 휴마로그');
+            const humalogLunch = getHumalogAction(lunchBefore, '점심 휴마로그');
+            const humalogPm = getHumalogAction(pmBefore, '저녁 휴마로그');
+
+            // 결과 화면 표시
+            document.getElementById('resultCard').classList.remove('hidden');
+            document.getElementById('resToujeo').innerHTML = toujeoResult;
+            document.getElementById('resHumalog').innerHTML = `⚫ 휴마로그 (검은색):<br>• ${humalogAm}<br>• ${humalogLunch}<br>• ${humalogPm}`;
+
+            // Firebase에 데이터 저장 (날짜를 고유 키로 사용 예: 2026-11-01)
+            const dateKey = date.replace(/-/g, '_');
+            const summaryText = `투제오:${newToujeo}U / 아침:${amBefore} 점심:${lunchBefore} 저녁:${pmBefore}`;
+
+            db.ref('insulin_records/' + dateKey).set({
+                date: date,
+                amBefore: amBefore,
+                lunchBefore: lunchBefore,
+                pmBefore: pmBefore,
+                summary: summaryText
+            }, (error) => {
+                if (error) {
+                    alert('저장 중 오류가 발생했습니다.');
                 } else {
-                    mHumalogVal = BASE_HUMALOG_MORNING + 2;
-                    mHumalogDesc = "식전혈당 200 이상 → 2단위 증량";
+                    // 저장 성공 시 부드럽게 결과로 스크롤
+                    document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' });
                 }
-            }
-            document.getElementById('res-morning-humalog').innerText = isNaN(morningBs) ? "- 단위" : `${mHumalogVal} 단위`;
-            document.getElementById('desc-morning-humalog').innerText = isNaN(morningBs) ? "기본 기준: 4단위" : mHumalogDesc;
-
-            // 3. 점심 휴마로그 계산
-            let lHumalogVal = BASE_HUMALOG_LUNCH;
-            let lHumalogDesc = "기준 용량 유지 (4단위)";
-            if (!isNaN(lunchBs)) {
-                if (lunchBs < 150) {
-                    lHumalogVal = Math.max(0, BASE_HUMALOG_LUNCH - 2);
-                    lHumalogDesc = "식전혈당 150 미만 → 2단위 감량";
-                } else if (lunchBs <= 200) {
-                    lHumalogVal = BASE_HUMALOG_LUNCH;
-                    lHumalogDesc = "식전혈당 150~200 → 유지";
-                } else {
-                    lHumalogVal = BASE_HUMALOG_LUNCH + 2;
-                    lHumalogDesc = "식전혈당 200 이상 → 2단위 증량";
-                }
-            }
-            document.getElementById('res-lunch-humalog').innerText = isNaN(lunchBs) ? "- 단위" : `${lHumalogVal} 단위`;
-            document.getElementById('desc-lunch-humalog').innerText = isNaN(lunchBs) ? "기본 기준: 4단위" : lHumalogDesc;
-
-            // 4. 저녁 휴마로그 계산
-            let dHumalogVal = BASE_HUMALOG_DINNER;
-            let dHumalogDesc = "기준 용량 유지 (8단위)";
-            if (!isNaN(dinnerBs)) {
-                if (dinnerBs < 150) {
-                    dHumalogVal = Math.max(0, BASE_HUMALOG_DINNER - 2);
-                    dHumalogDesc = "식전혈당 150 미만 → 2단위 감량";
-                } else if (dinnerBs <= 200) {
-                    dHumalogVal = BASE_HUMALOG_DINNER;
-                    dHumalogDesc = "식전혈당 150~200 → 유지";
-                } else {
-                    dHumalogVal = BASE_HUMALOG_DINNER + 2;
-                    dHumalogDesc = "식전혈당 200 이상 → 2단위 증량";
-                }
-            }
-            document.getElementById('res-dinner-humalog').innerText = isNaN(dinnerBs) ? "- 단위" : `${dHumalogVal} 단위`;
-            document.getElementById('desc-dinner-humalog').innerText = isNaN(dinnerBs) ? "기본 기준: 8단위" : dHumalogDesc;
-        }
-
-        // 오늘 날짜 데이터 로드
-        function loadTodayData() {
-            const todayStr = getFormattedDate(new Date());
-            document.getElementById('record-date').value = todayStr;
-            loadRecordForDate(todayStr);
-        }
-
-        // 특정 날짜의 기록을 로컬 스토리지에서 불러와 화면에 채우기
-        function loadRecordForDate(dateStr) {
-            const savedData = JSON.parse(localStorage.getItem('insulin_records') || '{}');
-            const dayRecord = savedData[dateStr] || {};
-
-            document.getElementById('morning-bs').value = dayRecord.morningBs !== undefined ? dayRecord.morningBs : '';
-            document.getElementById('lunch-bs').value = dayRecord.lunchBs !== undefined ? dayRecord.lunchBs : '';
-            document.getElementById('dinner-bs').value = dayRecord.dinnerBs !== undefined ? dayRecord.dinnerBs : '';
-
-            document.getElementById('actual-toujeo').value = dayRecord.actualToujeo !== undefined ? dayRecord.actualToujeo : '';
-            document.getElementById('actual-morning-humalog').value = dayRecord.actualMorningHumalog !== undefined ? dayRecord.actualMorningHumalog : '';
-            document.getElementById('actual-lunch-humalog').value = dayRecord.actualLunchHumalog !== undefined ? dayRecord.actualLunchHumalog : '';
-            document.getElementById('actual-dinner-humalog').value = dayRecord.actualDinnerHumalog !== undefined ? dayRecord.actualDinnerHumalog : '';
-
-            document.getElementById('daily-memo').value = dayRecord.memo || '';
-
-            calculateAll();
-        }
-
-        // 데이터 저장
-        function saveRecord() {
-            const dateStr = document.getElementById('record-date').value;
-            if (!dateStr) {
-                showModal("오류", "날짜를 선택해주세요.", "❌");
-                return;
-            }
-
-            const morningBs = document.getElementById('morning-bs').value;
-            const lunchBs = document.getElementById('lunch-bs').value;
-            const dinnerBs = document.getElementById('dinner-bs').value;
-
-            // 자동 계산된 추천 용량 추출
-            const toujeoRec = document.getElementById('res-toujeo').innerText;
-            const mHumRec = document.getElementById('res-morning-humalog').innerText;
-            const lHumRec = document.getElementById('res-lunch-humalog').innerText;
-            const dHumRec = document.getElementById('res-dinner-humalog').innerText;
-
-            const recordData = {
-                morningBs: morningBs !== "" ? Number(morningBs) : null,
-                lunchBs: lunchBs !== "" ? Number(lunchBs) : null,
-                dinnerBs: dinnerBs !== "" ? Number(dinnerBs) : null,
-                recommendedToujeo: toujeoRec,
-                recommendedMorningHumalog: mHumRec,
-                recommendedLunchHumalog: lHumRec,
-                recommendedDinnerHumalog: dHumRec,
-                actualToujeo: document.getElementById('actual-toujeo').value,
-                actualMorningHumalog: document.getElementById('actual-morning-humalog').value,
-                actualLunchHumalog: document.getElementById('actual-lunch-humalog').value,
-                actualDinnerHumalog: document.getElementById('actual-dinner-humalog').value,
-                memo: document.getElementById('daily-memo').value
-            };
-
-            const savedData = JSON.parse(localStorage.getItem('insulin_records') || '{}');
-            savedData[dateStr] = recordData;
-            localStorage.setItem('insulin_records', JSON.stringify(savedData));
-
-            showModal("저장 완료", `${dateStr} 혈당 및 인슐린 기록이 안전하게 저장되었습니다!`, "💾");
-        }
-
-        // 입력 폼 초기화
-        function clearForm() {
-            document.getElementById('morning-bs').value = '';
-            document.getElementById('lunch-bs').value = '';
-            document.getElementById('dinner-bs').value = '';
-            document.getElementById('actual-toujeo').value = '';
-            document.getElementById('actual-morning-humalog').value = '';
-            document.getElementById('actual-lunch-humalog').value = '';
-            document.getElementById('actual-dinner-humalog').value = '';
-            document.getElementById('daily-memo').value = '';
-            calculateAll();
-        }
-
-        // 관리표 테이블 렌더링
-        function renderHistoryTable() {
-            const tbody = document.getElementById('history-table-body');
-            tbody.innerHTML = '';
-
-            const savedData = JSON.parse(localStorage.getItem('insulin_records') || '{}');
-            const dates = Object.keys(savedData).sort().reverse(); // 최근 날짜가 위로 오도록 정렬
-
-            if (dates.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">저장된 기록이 없습니다. '오늘 기록 및 계산' 탭에서 기록을 남겨보세요.</td></tr>`;
-                return;
-            }
-
-            dates.forEach(date => {
-                const rec = savedData[date];
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition";
-
-                tr.innerHTML = `
-                    <td class="p-3 font-bold border-r text-center align-middle text-slate-700">${date}</td>
-                    <td class="p-3 border-r text-center align-middle">
-                        <div class="font-extrabold text-blue-600">${rec.morningBs !== null ? rec.morningBs + ' mg/dL' : '-'}</div>
-                        <div class="text-xs text-slate-500 mt-0.5">권장: 투제오 ${rec.recommendedToujeo} / 휴마 ${rec.recommendedMorningHumalog}</div>
-                        ${rec.actualToujeo || rec.actualMorningHumalog ? `<div class="text-xs font-semibold text-emerald-600 mt-0.5">실제: 투제오 ${rec.actualToujeo || '-'} / 휴마 ${rec.actualMorningHumalog || '-'}</div>` : ''}
-                    </td>
-                    <td class="p-3 border-r text-center align-middle">
-                        <div class="font-extrabold text-emerald-600">${rec.lunchBs !== null ? rec.lunchBs + ' mg/dL' : '-'}</div>
-                        <div class="text-xs text-slate-500 mt-0.5">권장: ${rec.recommendedLunchHumalog}</div>
-                        ${rec.actualLunchHumalog ? `<div class="text-xs font-semibold text-emerald-600 mt-0.5">실제: ${rec.actualLunchHumalog}</div>` : ''}
-                    </td>
-                    <td class="p-3 border-r text-center align-middle">
-                        <div class="font-extrabold text-orange-600">${rec.dinnerBs !== null ? rec.dinnerBs + ' mg/dL' : '-'}</div>
-                        <div class="text-xs text-slate-500 mt-0.5">권장: ${rec.recommendedDinnerHumalog}</div>
-                        ${rec.actualDinnerHumalog ? `<div class="text-xs font-semibold text-emerald-600 mt-0.5">실제: ${rec.actualDinnerHumalog}</div>` : ''}
-                    </td>
-                    <td class="p-3 border-r text-sm align-middle text-slate-600">${rec.memo || '-'}</td>
-                    <td class="p-3 text-center align-middle">
-                        <div class="flex justify-center space-x-2">
-                            <button onclick="editRecord('${date}')" class="bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg font-bold text-xs transition">수정</button>
-                            <button onclick="deleteRecord('${date}')" class="bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg font-bold text-xs transition">삭제</button>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(tr);
             });
-        }
-
-        // 기록 불러와서 수정하기 위해 탭 이동
-        function editRecord(dateStr) {
-            document.getElementById('record-date').value = dateStr;
-            loadRecordForDate(dateStr);
-            switchTab('calc');
-        }
-
-        // 기록 삭제
-        function deleteRecord(dateStr) {
-            if (confirm(`정말 ${dateStr} 기록을 삭제하시겠습니까?`)) {
-                const savedData = JSON.parse(localStorage.getItem('insulin_records') || '{}');
-                delete savedData[dateStr];
-                localStorage.setItem('insulin_records', JSON.stringify(savedData));
-                renderHistoryTable();
-            }
-        }
-
-        // 데이터 백업 (JSON 파일 다운로드)
-        function exportData() {
-            const data = localStorage.getItem('insulin_records') || '{}';
-            const blob = new Blob([data], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `insulin_records_${getFormattedDate(new Date())}.json`;
-            a.click();
-        }
-
-        // 데이터 복원
-        function importData(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const parsed = JSON.parse(e.target.result);
-                    localStorage.setItem('insulin_records', JSON.stringify(parsed));
-                    renderHistoryTable();
-                    showModal("성공", "데이터가 성공적으로 복원되었습니다!", "✅");
-                } catch (err) {
-                    showModal("오류", "올바른 백업 파일이 아닙니다.", "❌");
-                }
-            };
-            reader.readAsText(file);
-        }
-
-        // 커스텀 모달 제어 함수
-        function showModal(title, message, icon = "✅") {
-            document.getElementById('modal-title').innerText = title;
-            document.getElementById('modal-message').innerText = message;
-            document.getElementById('modal-icon').innerText = icon;
-            document.getElementById('custom-modal').classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('custom-modal').classList.add('hidden');
         }
     </script>
 </body>
